@@ -1,0 +1,149 @@
+import sqlite3
+from datetime import datetime, timedelta
+
+# Connect to the SQLite database
+conn = sqlite3.connect('library.db')
+cursor = conn.cursor()
+
+# Function to initialize database tables
+def initialize_database():
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS books (
+            book_id INTEGER PRIMARY KEY,
+            title TEXT NOT NULL,
+            author TEXT NOT NULL,
+            quantity INTEGER NOT NULL
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS transactions (
+            transaction_id INTEGER PRIMARY KEY,
+            book_id INTEGER,
+            user_id INTEGER,
+            issue_date TEXT,
+            return_date TEXT,
+            FOREIGN KEY (book_id) REFERENCES books(book_id),
+            FOREIGN KEY (user_id) REFERENCES users(user_id)
+        )
+    ''')
+    conn.commit()
+
+# Function to add a new book to the library
+def add_book(title, author, quantity):
+    cursor.execute('INSERT INTO books (title, author, quantity) VALUES (?, ?, ?)', (title, author, quantity))
+    conn.commit()
+    print(f'Book "{title}" by {author} added successfully.')
+
+# Function to search for a book by title
+def search_book(title):
+    cursor.execute('SELECT * FROM books WHERE title LIKE ?', ('%' + title + '%',))
+    books = cursor.fetchall()
+    if not books:
+        print('No book found.')
+    else:
+        for book in books:
+            print(f'Book ID: {book[0]}, Title: {book[1]}, Author: {book[2]}, Quantity: {book[3]}')
+
+# Function to add a new user
+def add_user(name, email):
+    cursor.execute('INSERT INTO users (name, email) VALUES (?, ?)', (name, email))
+    conn.commit()
+    print(f'User "{name}" added successfully.')
+
+# Function to track a user
+def track_user(email):
+    cursor.execute('SELECT * FROM users WHERE email = ?', (email,))
+    user = cursor.fetchone()
+    if not user:
+        print('User not found.')
+    else:
+        print(f'User ID: {user[0]}, Name: {user[1]}, Email: {user[2]}')
+
+# Function to issue a book to a user
+def issue_book(book_id, user_id):
+    # Check if book is available
+    cursor.execute('SELECT quantity FROM books WHERE book_id = ?', (book_id,))
+    quantity = cursor.fetchone()[0]
+    if quantity > 0:
+        # Issue the book
+        issue_date = datetime.now().strftime('%Y-%m-%d')
+        return_date = (datetime.now() + timedelta(days=14)).strftime('%Y-%m-%d')
+        cursor.execute('INSERT INTO transactions (book_id, user_id, issue_date, return_date) VALUES (?, ?, ?, ?)',
+                       (book_id, user_id, issue_date, return_date))
+        cursor.execute('UPDATE books SET quantity = quantity - 1 WHERE book_id = ?', (book_id,))
+        conn.commit()
+        print(f'Book with ID {book_id} issued to User with ID {user_id}. Return by {return_date}.')
+    else:
+        print('Book not available for issue.')
+
+# Function to return a book from a user
+def return_book(book_id, user_id):
+    cursor.execute('SELECT * FROM transactions WHERE book_id = ? AND user_id = ?', (book_id, user_id))
+    transaction = cursor.fetchone()
+    if not transaction:
+        print('No such transaction found.')
+    else:
+        return_date = datetime.now().strftime('%Y-%m-%d')
+        cursor.execute('UPDATE transactions SET return_date = ? WHERE book_id = ? AND user_id = ?',
+                       (return_date, book_id, user_id))
+        cursor.execute('UPDATE books SET quantity = quantity + 1 WHERE book_id = ?', (book_id,))
+        conn.commit()
+        print(f'Book with ID {book_id} returned by User with ID {user_id} on {return_date}.')
+
+# Main function to run the library management system
+if __name__ == '__main__':
+    initialize_database()
+    while True:
+        print('\nWelcome to Library Management System')
+        print('1. Add Book')
+        print('2. Search Book')
+        print('3. Add User')
+        print('4. Track User')
+        print('5. Issue Book')
+        print('6. Return Book')
+        print('0. Exit')
+
+        choice = input('Enter your choice: ')
+
+        if choice == '1':
+            title = input('Enter book title: ')
+            author = input('Enter author name: ')
+            quantity = int(input('Enter quantity: '))
+            add_book(title, author, quantity)
+
+        elif choice == '2':
+            title = input('Enter book title to search: ')
+            search_book(title)
+
+        elif choice == '3':
+            name = input('Enter user name: ')
+            email = input('Enter user email: ')
+            add_user(name, email)
+
+        elif choice == '4':
+            email = input('Enter user email to track: ')
+            track_user(email)
+
+        elif choice == '5':
+            book_id = int(input('Enter book ID to issue: '))
+            user_id = int(input('Enter user ID: '))
+            issue_book(book_id, user_id)
+
+        elif choice == '6':
+            book_id = int(input('Enter book ID to return: '))
+            user_id = int(input('Enter user ID: '))
+            return_book(book_id, user_id)
+
+        elif choice == '0':
+            print('Exiting...')
+            break
+
+        else:
+            print('Invalid choice. Please try again.')
